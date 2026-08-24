@@ -39,8 +39,10 @@ effect on the next Grand Exchange event, no restart needed.
 ## Log formats
 
 Each line represents one Grand Exchange offer-state change (offer placed,
-partially filled, fully filled, cancelled, or slot cleared). Item IDs are
-logged as-is (not resolved to item names).
+partially filled, fully filled, cancelled, or slot cleared). `item` is the
+item ID; `itemName` is its resolved display name, looked up live from the
+client each event (so it's always correct for your game version, but is
+empty for `EMPTY` slot-cleared lines, since there's no item to name).
 
 `worth` is the actual gp that changed hands - what you paid on a buy, or
 what you actually received on a sell, **after** the Grand Exchange's 2%
@@ -54,18 +56,19 @@ listed to sell at 143gp but matched at 152gp, taxed 3gp, netting 149gp):
 
 **Plain text** (default):
 ```
-2026-08-24 23:44:10 state: BUY slot: 0 item: 2351 max: 1 offer: 164
-2026-08-24 23:44:11 state: BOUGHT slot: 0 item: 2351 qty: 1 worth: 153 tax: 0
-2026-08-24 23:44:35 state: SOLD slot: 0 item: 2351 qty: 1 worth: 149 tax: 3
+2026-08-24 23:44:10 state: BUY slot: 0 item: 2351 (Iron bar) max: 1 offer: 164
+2026-08-24 23:44:11 state: BOUGHT slot: 0 item: 2351 (Iron bar) qty: 1 worth: 153 tax: 0
+2026-08-24 23:44:35 state: SOLD slot: 0 item: 2351 (Iron bar) qty: 1 worth: 149 tax: 3
 ```
 
-**Tabular** (CSV: `date,time,state,slot,item,qty,worth,max,offer,tax`):
+**Tabular** (CSV: `date,time,state,slot,item,itemName,qty,worth,max,offer,tax`
+- `itemName` is quoted since it's the only free-text field):
 ```
-2026-08-24,23:44:11,BOUGHT,0,2351,1,153,1,164,0
-2026-08-24,23:44:35,SOLD,0,2351,1,149,1,143,3
+2026-08-24,23:44:11,BOUGHT,0,2351,"Iron bar",1,153,1,164,0
+2026-08-24,23:44:35,SOLD,0,2351,"Iron bar",1,149,1,143,3
 ```
 
 **JSON** (one object per line):
 ```json
-{"date":"2026-08-24","time":"23:44:35","state":"SOLD","slot":0,"item":2351,"qty":1,"worth":149,"max":1,"offer":143,"tax":3}
+{"date":"2026-08-24","time":"23:44:35","state":"SOLD","slot":0,"item":2351,"itemName":"Iron bar","qty":1,"worth":149,"max":1,"offer":143,"tax":3}
 ```

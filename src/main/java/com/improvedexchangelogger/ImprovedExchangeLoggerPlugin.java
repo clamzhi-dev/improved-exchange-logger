@@ -33,6 +33,7 @@ import net.runelite.client.RuneLite;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import java.io.File;
@@ -54,6 +55,9 @@ public class ImprovedExchangeLoggerPlugin extends Plugin
 
 	@Inject
 	private ScheduledExecutorService executor;
+
+	@Inject
+	private ItemManager itemManager;
 
 	private final String dirName = File.separator + "improved-exchange-logger";
 	// No extension here - ImprovedExchangeLoggerWriter appends one matching the
@@ -117,7 +121,11 @@ public class ImprovedExchangeLoggerPlugin extends Plugin
 		{
 			Player localPlayer = client.getLocalPlayer();
 			String accountName = localPlayer != null ? localPlayer.getName() : null;
-			writer.grandExchangeEvent(offerEvent, accountName);
+
+			int itemId = offerEvent.getOffer().getItemId();
+			String itemName = itemId > 0 ? itemManager.getItemComposition(itemId).getName() : "";
+
+			writer.grandExchangeEvent(offerEvent, accountName, itemName);
 		}
 	}
 

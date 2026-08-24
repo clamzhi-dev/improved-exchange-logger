@@ -33,6 +33,7 @@ public class ImprovedExchangeLoggerSlotStatus
 	GrandExchangeOfferState state;
 	int slot;
 	int item;
+	String itemName;
 	int qty;
 	int worth;
 	int max;

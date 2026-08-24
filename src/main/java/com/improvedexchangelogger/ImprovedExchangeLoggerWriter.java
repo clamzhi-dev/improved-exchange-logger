@@ -94,7 +94,7 @@ public class ImprovedExchangeLoggerWriter
 
 	// Called on the client thread. Snapshots the offer into plain data before handing
 	// off to a background thread - GrandExchangeOffer must not be touched off-thread.
-	public void grandExchangeEvent(GrandExchangeOfferChanged event, String accountName)
+	public void grandExchangeEvent(GrandExchangeOfferChanged event, String accountName, String itemName)
 	{
 		if (!fileExist)
 		{
@@ -110,6 +110,7 @@ public class ImprovedExchangeLoggerWriter
 		status.state = offer.getState();
 		status.slot = event.getSlot();
 		status.item = offer.getItemId();
+		status.itemName = itemName;
 		status.qty = offer.getQuantitySold();
 		status.worth = offer.getSpent();
 		status.max = offer.getTotalQuantity();
