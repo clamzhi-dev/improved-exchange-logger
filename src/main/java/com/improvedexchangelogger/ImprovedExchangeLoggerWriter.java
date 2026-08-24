@@ -22,7 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package com.exchangelogger;
+package com.improvedexchangelogger;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GrandExchangeOffer;
@@ -41,10 +41,18 @@ import static net.runelite.api.GrandExchangeOfferState.CANCELLED_BUY;
 import static net.runelite.api.GrandExchangeOfferState.CANCELLED_SELL;
 import static net.runelite.api.GrandExchangeOfferState.EMPTY;
 import static net.runelite.api.GrandExchangeOfferState.SELLING;
+import static net.runelite.api.GrandExchangeOfferState.SOLD;
 
 @Slf4j
-public class ExchangeLoggerWriter
+public class ImprovedExchangeLoggerWriter
 {
+	// GE sale tax: 2% of the per-item price, rounded down, waived under 50gp/item,
+	// capped at 5,000,000gp per item. offer.getSpent() reports the gross pre-tax
+	// total on sells, not what the seller actually receives, so this is applied
+	// after the fact using the average per-unit price (worth / qty).
+	private static final int GE_TAX_MIN_PRICE = 50;
+	private static final int GE_TAX_CAP_PER_ITEM = 5_000_000;
+
 	private File logFile;
 	private volatile boolean fileExist;
 
@@ -52,9 +60,9 @@ public class ExchangeLoggerWriter
 	private final int[] prevItemId;
 	private final GrandExchangeOfferState[] prevState;
 
-	private final ExchangeLoggerFormatting formatting;
+	private final ImprovedExchangeLoggerFormatting formatting;
 	private final ScheduledExecutorService executor;
-	private volatile ExchangeLoggerFormat format;
+	private volatile ImprovedExchangeLoggerFormat format;
 	private volatile boolean rewrite;
 	private volatile boolean splitByAccount;
 	private final String logPath;
@@ -62,7 +70,7 @@ public class ExchangeLoggerWriter
 	private String activePath;
 	private String logDate;
 
-	ExchangeLoggerWriter(String path, ExchangeLoggerFormat form, boolean re, boolean split, ScheduledExecutorService executor)
+	ImprovedExchangeLoggerWriter(String path, ImprovedExchangeLoggerFormat form, boolean re, boolean split, ScheduledExecutorService executor)
 	{
 		fileExist = true;
 		logDate = currentDateTime("yyyy-MM-dd");
@@ -80,7 +88,7 @@ public class ExchangeLoggerWriter
 		Arrays.fill(prevQuantity, -1);          //Default to -1, because 0 is a valid state
 		Arrays.fill(prevItemId, -1);
 
-		formatting = new ExchangeLoggerFormatting();
+		formatting = new ImprovedExchangeLoggerFormatting();
 		openLogFile(logPath);
 	}
 
@@ -96,7 +104,7 @@ public class ExchangeLoggerWriter
 		GrandExchangeOffer offer = event.getOffer();
 		String[] split = currentDateTime("yyyy-MM-dd HH:mm:ss").split(" ", 2);
 
-		ExchangeLoggerSlotStatus status = new ExchangeLoggerSlotStatus();
+		ImprovedExchangeLoggerSlotStatus status = new ImprovedExchangeLoggerSlotStatus();
 		status.date = split[0];
 		status.time = split[1];
 		status.state = offer.getState();
@@ -107,11 +115,36 @@ public class ExchangeLoggerWriter
 		status.max = offer.getTotalQuantity();
 		status.offer = offer.getPrice();
 
+		if (formatting.anyEqualState(status.state, SELLING, SOLD, CANCELLED_SELL))
+		{
+			applySellTax(status);
+		}
+
 		executor.execute(() -> processEvent(status, accountName));
 	}
 
+	// Mutates worth (down to the net amount actually received) and sets tax (the amount
+	// withheld) - tax stays 0 for buys and for sales under the 50gp/item exemption.
+	private static void applySellTax(ImprovedExchangeLoggerSlotStatus status)
+	{
+		if (status.qty <= 0)
+		{
+			return;
+		}
+
+		int unitPrice = status.worth / status.qty;
+		if (unitPrice < GE_TAX_MIN_PRICE)
+		{
+			return;
+		}
+
+		int unitTax = Math.min((unitPrice * 2) / 100, GE_TAX_CAP_PER_ITEM);
+		status.tax = unitTax * status.qty;
+		status.worth -= status.tax;
+	}
+
 	// Runs on a background thread. All disk I/O and mutable writer state lives here.
-	private synchronized void processEvent(ExchangeLoggerSlotStatus status, String accountName)
+	private synchronized void processEvent(ImprovedExchangeLoggerSlotStatus status, String accountName)
 	{
 		if (!fileExist)
 		{
@@ -178,7 +211,7 @@ public class ExchangeLoggerWriter
 		}
 	}
 
-	private void writeFile(ExchangeLoggerSlotStatus status)
+	private void writeFile(ImprovedExchangeLoggerSlotStatus status)
 	{
 		String writeLine;
 		switch (format)
@@ -211,7 +244,7 @@ public class ExchangeLoggerWriter
 	// 2 cancelled_buy/sell events in sequence in the same slot shouldn't be possible
 	// Also requires the item id to match - otherwise a desync (e.g. a new offer placed with a
 	// coincidentally equal quantity/state) would be wrongly swallowed as a duplicate.
-	private boolean duplicateHandler(ExchangeLoggerSlotStatus status)
+	private boolean duplicateHandler(ImprovedExchangeLoggerSlotStatus status)
 	{
 		int slot = status.slot;
 		boolean duplicate = false;
@@ -331,7 +364,7 @@ public class ExchangeLoggerWriter
 		rewrite = re;
 	}
 
-	public void setFormat(ExchangeLoggerFormat form)
+	public void setFormat(ImprovedExchangeLoggerFormat form)
 	{
 		format = form;
 	}

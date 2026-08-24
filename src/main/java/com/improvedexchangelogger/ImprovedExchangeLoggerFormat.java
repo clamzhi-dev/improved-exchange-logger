@@ -22,19 +22,13 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package com.exchangelogger;
+package com.improvedexchangelogger;
 
-import net.runelite.api.GrandExchangeOfferState;
-
-public class ExchangeLoggerSlotStatus
+public enum ImprovedExchangeLoggerFormat
 {
-	String date;
-	String time;
-	GrandExchangeOfferState state;
-	int slot;
-	int item;
-	int qty;
-	int worth;
-	int max;
-	int offer;
+	TEXT,
+
+	TABULAR,
+
+	JSON
 }

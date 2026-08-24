@@ -22,7 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package com.exchangelogger;
+package com.improvedexchangelogger;
 
 import com.google.inject.Provides;
 import javax.inject.Inject;
@@ -40,30 +40,30 @@ import java.util.concurrent.ScheduledExecutorService;
 
 @Slf4j
 @PluginDescriptor(
-	name = "Exchange Logger",
+	name = "Improved Exchange Logger",
 	description = "Stores all GE transactions in log file(s)",
 	tags = {"grand exchange", "trade", "trading", "logger", "external"}
 )
-public class ExchangeLoggerPlugin extends Plugin
+public class ImprovedExchangeLoggerPlugin extends Plugin
 {
 	@Inject
 	private Client client;
 
 	@Inject
-	private ExchangeLoggerConfig config;
+	private ImprovedExchangeLoggerConfig config;
 
 	@Inject
 	private ScheduledExecutorService executor;
 
-	private final String dirName = File.separator + "exchange-logger";
+	private final String dirName = File.separator + "improved-exchange-logger";
 	private final String logName = File.separator + "exchange.log";
 
-	public static final String CONFIG_GROUP = "exchangelogger";
-	private ExchangeLoggerFormat format;
+	public static final String CONFIG_GROUP = "improvedexchangelogger";
+	private ImprovedExchangeLoggerFormat format;
 	private boolean rewrite;
 	public String logPath;
 
-	private ExchangeLoggerWriter writer;
+	private ImprovedExchangeLoggerWriter writer;
 
 	@Override
 	protected void startUp() throws Exception
@@ -75,13 +75,13 @@ public class ExchangeLoggerPlugin extends Plugin
 		new File(dir).mkdirs();
 		logPath = dir + logName;
 
-		writer = new ExchangeLoggerWriter(logPath, format, rewrite, config.splitByAccount(), executor);
+		writer = new ImprovedExchangeLoggerWriter(logPath, format, rewrite, config.splitByAccount(), executor);
 	}
 
 	@Override
 	protected void shutDown() throws Exception
 	{
-		log.info("ExchangeLogger stopped!");
+		log.info("ImprovedExchangeLogger stopped!");
 	}
 
 	@Subscribe
@@ -120,8 +120,8 @@ public class ExchangeLoggerPlugin extends Plugin
 	}
 
 	@Provides
-	ExchangeLoggerConfig provideConfig(ConfigManager configManager)
+	ImprovedExchangeLoggerConfig provideConfig(ConfigManager configManager)
 	{
-		return configManager.getConfig(ExchangeLoggerConfig.class);
+		return configManager.getConfig(ImprovedExchangeLoggerConfig.class);
 	}
 }

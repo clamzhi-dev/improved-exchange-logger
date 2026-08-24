@@ -22,19 +22,19 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package com.exchangelogger;
+package com.improvedexchangelogger;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.runelite.api.GrandExchangeOfferState;
 import static net.runelite.api.GrandExchangeOfferState.*;
 
-public class ExchangeLoggerFormatting
+public class ImprovedExchangeLoggerFormatting
 {
 	// Stateless; reused across the JSON formatter to avoid rebuilding it per call.
 	private static final Gson GSON = new GsonBuilder().create();
 
-	public String plainText(ExchangeLoggerSlotStatus status)
+	public String plainText(ImprovedExchangeLoggerSlotStatus status)
 	{
 		String time = status.date + " " + status.time;
 		String line;
@@ -51,7 +51,7 @@ public class ExchangeLoggerFormatting
 		else if (anyEqualState(status.state, CANCELLED_BUY, CANCELLED_SELL))
 		{
 			line = (time + " state: " + status.state + " slot: " + status.slot + " item: " + status.item
-					+ " qty: " + status.qty + " worth: " + status.worth + " max: " + status.max);
+					+ " qty: " + status.qty + " worth: " + status.worth + " tax: " + status.tax + " max: " + status.max);
 		}
 		else if (status.state == EMPTY)
 		{
@@ -60,19 +60,19 @@ public class ExchangeLoggerFormatting
 		else
 		{
 			line = (time + " state: " + status.state + " slot: " + status.slot + " item: " + status.item
-					+ " qty: " + status.qty + " worth: " + status.worth);
+					+ " qty: " + status.qty + " worth: " + status.worth + " tax: " + status.tax);
 		}
 		return line;
 	}
 
-	public String tabular(ExchangeLoggerSlotStatus status)
+	public String tabular(ImprovedExchangeLoggerSlotStatus status)
 	{
 		return (status.date + "," + status.time + "," + status.state
 				+ "," + status.slot + "," + status.item + "," + status.qty
-				+ "," + status.worth + "," + status.max + "," + status.offer);
+				+ "," + status.worth + "," + status.max + "," + status.offer + "," + status.tax);
 	}
 
-	public String json(ExchangeLoggerSlotStatus status)
+	public String json(ImprovedExchangeLoggerSlotStatus status)
 	{
 		return GSON.toJson(status);
 	}

@@ -1,13 +1,13 @@
-package com.exchangelogger;
+package com.improvedexchangelogger;
 
 import net.runelite.client.RuneLite;
 import net.runelite.client.externalplugins.ExternalPluginManager;
 
-public class ExchangeLoggerPluginTest
+public class ImprovedExchangeLoggerPluginTest
 {
 	public static void main(String[] args) throws Exception
 	{
-		ExternalPluginManager.loadBuiltin(ExchangeLoggerPlugin.class);
+		ExternalPluginManager.loadBuiltin(ImprovedExchangeLoggerPlugin.class);
 		RuneLite.main(args);
 	}
 }

@@ -22,14 +22,14 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package com.exchangelogger;
+package com.improvedexchangelogger;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 
-@ConfigGroup("exchangelogger")
-public interface ExchangeLoggerConfig extends Config
+@ConfigGroup("improvedexchangelogger")
+public interface ImprovedExchangeLoggerConfig extends Config
 {
 	@ConfigItem(
 		position = 1,
@@ -37,9 +37,9 @@ public interface ExchangeLoggerConfig extends Config
 		name = "Log Format",
 		description = "Select format for the log output"
 	)
-	default ExchangeLoggerFormat logFormat()
+	default ImprovedExchangeLoggerFormat logFormat()
 	{
-		return ExchangeLoggerFormat.TEXT;
+		return ImprovedExchangeLoggerFormat.TEXT;
 	}
 
 	@ConfigItem(
