@@ -87,6 +87,11 @@ public class ImprovedExchangeLoggerFormatting
 		return GSON.toJson(status);
 	}
 
+	public ImprovedExchangeLoggerSlotStatus parseJson(String line)
+	{
+		return GSON.fromJson(line, ImprovedExchangeLoggerSlotStatus.class);
+	}
+
 	public boolean anyEqualState(GrandExchangeOfferState expected, GrandExchangeOfferState ...array)
 	{
 		for (GrandExchangeOfferState state : array)

@@ -117,7 +117,7 @@ public class ImprovedExchangeLoggerPlugin extends Plugin
 	public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerEvent)
 	{
 		// Trades are cleared by the client during LOGIN_SCREEN/HOPPING/LOGGING_IN, ignore those
-		if (client.getGameState() == GameState.LOGGED_IN)
+		if (client.getGameState() == GameState.LOGGED_IN && writer.isActive())
 		{
 			Player localPlayer = client.getLocalPlayer();
 			String accountName = localPlayer != null ? localPlayer.getName() : null;

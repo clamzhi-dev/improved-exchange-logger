@@ -24,6 +24,7 @@
  */
 package com.improvedexchangelogger;
 
+import com.google.gson.JsonSyntaxException;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
@@ -126,6 +127,9 @@ public class ImprovedExchangeLoggerWriter
 
 	// Mutates worth (down to the net amount actually received) and sets tax (the amount
 	// withheld) - tax stays 0 for buys and for sales under the 50gp/item exemption.
+	// Math is done in long to avoid overflowing int on the unitPrice*2 step for
+	// extremely high-value items; the final tax can never exceed worth (an int), so
+	// the cast back to int at the end is always safe.
 	private static void applySellTax(ImprovedExchangeLoggerSlotStatus status)
 	{
 		if (status.qty <= 0)
@@ -133,14 +137,14 @@ public class ImprovedExchangeLoggerWriter
 			return;
 		}
 
-		int unitPrice = status.worth / status.qty;
+		long unitPrice = status.worth / status.qty;
 		if (unitPrice < GE_TAX_MIN_PRICE)
 		{
 			return;
 		}
 
-		int unitTax = Math.min((unitPrice * 2) / 100, GE_TAX_CAP_PER_ITEM);
-		status.tax = unitTax * status.qty;
+		long unitTax = Math.min((unitPrice * 2) / 100, GE_TAX_CAP_PER_ITEM);
+		status.tax = (int) (unitTax * status.qty);
 		status.worth -= status.tax;
 	}
 
@@ -293,8 +297,8 @@ public class ImprovedExchangeLoggerWriter
 	private void preserveCurrentFile(String fileDate)
 	{
 		int extIndex = activePath.lastIndexOf('.');
-		String base = activePath.substring(0, extIndex);
-		String fileType = activePath.substring(extIndex);
+		String base = extIndex >= 0 ? activePath.substring(0, extIndex) : activePath;
+		String fileType = extIndex >= 0 ? activePath.substring(extIndex) : "";
 		String rename = base + "_" + fileDate + fileType;
 
 		if (!logFile.renameTo(new File(rename)))
@@ -309,24 +313,12 @@ public class ImprovedExchangeLoggerWriter
 	{
 		String fileDate = "";
 
-		try
+		try (Scanner reader = new Scanner(logFile))	//Read current log´s date
 		{
-			Scanner reader = new Scanner(logFile);	//Read current log´s date
 			if (reader.hasNextLine())
 			{
-				fileDate = reader.nextLine();
-
-				if (fileDate.contains("{"))		//Json format
-				{
-					String remove = "{\"date\":\"";
-					fileDate = fileDate.substring(remove.length(), logDate.length() + remove.length());
-				}
-				else
-				{
-					fileDate = fileDate.substring(0, logDate.length());
-				}
+				fileDate = extractDate(reader.nextLine());
 			}
-			reader.close();
 		}
 		catch (IOException e)
 		{
@@ -337,6 +329,29 @@ public class ImprovedExchangeLoggerWriter
 		{
 			preserveCurrentFile(fileDate);
 		}
+	}
+
+	// TEXT and TABULAR both start each line with the date (yyyy-MM-dd). JSON needs
+	// actual parsing rather than assuming "date" is serialized as the first field -
+	// that was only ever true by accident of field declaration order, not guaranteed.
+	// activePath's extension always matches the currently active format (see
+	// computeLogPath), so this file was written under that same format.
+	private String extractDate(String firstLine)
+	{
+		if (format == ImprovedExchangeLoggerFormat.JSON)
+		{
+			try
+			{
+				ImprovedExchangeLoggerSlotStatus status = formatting.parseJson(firstLine);
+				return status != null && status.date != null ? status.date : "";
+			}
+			catch (JsonSyntaxException e)
+			{
+				return "";
+			}
+		}
+
+		return firstLine.length() >= logDate.length() ? firstLine.substring(0, logDate.length()) : "";
 	}
 
 	private File createLog(String path)
@@ -390,5 +405,12 @@ public class ImprovedExchangeLoggerWriter
 	public void setSplitByAccount(boolean split)
 	{
 		splitByAccount = split;
+	}
+
+	// Lets callers skip event-preparation work (e.g. resolving the item name) up front
+	// when nothing would be written anyway - e.g. the log file failed to create.
+	public boolean isActive()
+	{
+		return fileExist;
 	}
 }
