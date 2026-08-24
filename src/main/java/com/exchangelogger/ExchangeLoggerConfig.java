@@ -52,4 +52,15 @@ public interface ExchangeLoggerConfig extends Config
 	{
 		return false;
 	}
+
+	@ConfigItem(
+		position = 3,
+		keyName = "splitByAccount",
+		name = "Split By Account",
+		description = "Log each account to its own file instead of a single shared log"
+	)
+	default boolean splitByAccount()
+	{
+		return false;
+	}
 }

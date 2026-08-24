@@ -75,7 +75,7 @@ public class ExchangeLoggerPlugin extends Plugin
 		new File(dir).mkdirs();
 		logPath = dir + logName;
 
-		writer = new ExchangeLoggerWriter(logPath, format, rewrite, executor);
+		writer = new ExchangeLoggerWriter(logPath, format, rewrite, config.splitByAccount(), executor);
 	}
 
 	@Override
@@ -100,6 +100,10 @@ public class ExchangeLoggerPlugin extends Plugin
 				writer.setRewrite(rewrite);
 
 			}
+			else if (event.getKey().equals("splitByAccount"))	//Log each account to its own file
+			{
+				writer.setSplitByAccount(config.splitByAccount());
+			}
 		}
 	}
 
@@ -109,7 +113,9 @@ public class ExchangeLoggerPlugin extends Plugin
 		// Trades are cleared by the client during LOGIN_SCREEN/HOPPING/LOGGING_IN, ignore those
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
-			writer.grandExchangeEvent(offerEvent);
+			Player localPlayer = client.getLocalPlayer();
+			String accountName = localPlayer != null ? localPlayer.getName() : null;
+			writer.grandExchangeEvent(offerEvent, accountName);
 		}
 	}
 
