@@ -56,17 +56,22 @@ public class ExchangeLoggerWriter
 	private final ScheduledExecutorService executor;
 	private volatile ExchangeLoggerFormat format;
 	private volatile boolean rewrite;
+	private volatile boolean splitByAccount;
 	private final String logPath;
+	private final String logDir;
+	private String activePath;
 	private String logDate;
 
-	ExchangeLoggerWriter(String path, ExchangeLoggerFormat form, boolean re, ScheduledExecutorService executor)
+	ExchangeLoggerWriter(String path, ExchangeLoggerFormat form, boolean re, boolean split, ScheduledExecutorService executor)
 	{
 		fileExist = true;
 		logDate = currentDateTime("yyyy-MM-dd");
 
 		logPath = path;
+		logDir = new File(path).getParent();
 		format = form;
 		rewrite = re;
+		splitByAccount = split;
 		this.executor = executor;
 
 		prevQuantity = new int[8];
@@ -76,29 +81,12 @@ public class ExchangeLoggerWriter
 		Arrays.fill(prevItemId, -1);
 
 		formatting = new ExchangeLoggerFormatting();
-		logFile = new File(logPath);
-
-		if (logFile.isFile())
-		{
-			if (rewrite)
-			{
-				removeCurrentFile();			//If user only want one log file
-				logFile = createLog(logPath);
-			}
-			else
-			{
-				fileDateCheck();				//Check if current log is for today's date
-			}
-		}
-		else
-		{
-			logFile = createLog(logPath);       //First time running plugin
-		}
+		openLogFile(logPath);
 	}
 
 	// Called on the client thread. Snapshots the offer into plain data before handing
 	// off to a background thread - GrandExchangeOffer must not be touched off-thread.
-	public void grandExchangeEvent(GrandExchangeOfferChanged event)
+	public void grandExchangeEvent(GrandExchangeOfferChanged event, String accountName)
 	{
 		if (!fileExist)
 		{
@@ -119,15 +107,21 @@ public class ExchangeLoggerWriter
 		status.max = offer.getTotalQuantity();
 		status.offer = offer.getPrice();
 
-		executor.execute(() -> processEvent(status));
+		executor.execute(() -> processEvent(status, accountName));
 	}
 
 	// Runs on a background thread. All disk I/O and mutable writer state lives here.
-	private synchronized void processEvent(ExchangeLoggerSlotStatus status)
+	private synchronized void processEvent(ExchangeLoggerSlotStatus status, String accountName)
 	{
 		if (!fileExist)
 		{
 			return;
+		}
+
+		String targetPath = computeLogPath(accountName);
+		if (!targetPath.equals(activePath))    //Switch (or create) the file for this account
+		{
+			openLogFile(targetPath);
 		}
 		else if (!rewrite && !logDate.equals(status.date))  //New log if date changed during run-time
 		{
@@ -139,6 +133,49 @@ public class ExchangeLoggerWriter
 			return;
 		}
 		writeFile(status);
+	}
+
+	// The shared log, unless splitting by account is on and we know the account - then each
+	// account gets its own file in the same directory.
+	private String computeLogPath(String accountName)
+	{
+		if (!splitByAccount || accountName == null || accountName.isEmpty())
+		{
+			return logPath;
+		}
+
+		String sanitized = accountName.trim().replaceAll("[^a-zA-Z0-9]+", "_");
+		if (sanitized.isEmpty())
+		{
+			return logPath;
+		}
+
+		return logDir + File.separator + "exchange_" + sanitized + ".log";
+	}
+
+	// Opens (or creates) the log file at path, applying the same rewrite/date-rollover
+	// rules a plugin restart would apply - used both at startup and on an account switch.
+	private void openLogFile(String path)
+	{
+		activePath = path;
+		logFile = new File(path);
+
+		if (logFile.isFile())
+		{
+			if (rewrite)
+			{
+				removeCurrentFile();			//If user only want one log file
+				logFile = createLog(path);
+			}
+			else
+			{
+				fileDateCheck();				//Check if current log is for today's date
+			}
+		}
+		else
+		{
+			logFile = createLog(path);       //First time running plugin (or first time for this account)
+		}
 	}
 
 	private void writeFile(ExchangeLoggerSlotStatus status)
@@ -206,14 +243,14 @@ public class ExchangeLoggerWriter
 	private void preserveCurrentFile(String fileDate)
 	{
 		String fileType = ".log";
-		String rename = logPath.substring(0, logPath.length() - fileType.length());
+		String rename = activePath.substring(0, activePath.length() - fileType.length());
 		rename = rename + "_" + fileDate + fileType;
 
 		if (!logFile.renameTo(new File(rename)))
 		{
 			log.debug("Failed to rename previous file to: " + rename);
 		}
-		logFile = createLog(logPath);
+		logFile = createLog(activePath);
 	}
 
 	//on start: If the current log file does not have the current date, store it and create a new one
@@ -297,5 +334,10 @@ public class ExchangeLoggerWriter
 	public void setFormat(ExchangeLoggerFormat form)
 	{
 		format = form;
+	}
+
+	public void setSplitByAccount(boolean split)
+	{
+		splitByAccount = split;
 	}
 }
