@@ -56,7 +56,9 @@ public class ImprovedExchangeLoggerPlugin extends Plugin
 	private ScheduledExecutorService executor;
 
 	private final String dirName = File.separator + "improved-exchange-logger";
-	private final String logName = File.separator + "exchange.log";
+	// No extension here - ImprovedExchangeLoggerWriter appends one matching the
+	// selected log format (.log/.csv/.json).
+	private final String logName = File.separator + "exchange";
 
 	public static final String CONFIG_GROUP = "improvedexchangelogger";
 	private ImprovedExchangeLoggerFormat format;

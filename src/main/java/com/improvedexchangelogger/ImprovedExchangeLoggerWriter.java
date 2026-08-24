@@ -89,7 +89,7 @@ public class ImprovedExchangeLoggerWriter
 		Arrays.fill(prevItemId, -1);
 
 		formatting = new ImprovedExchangeLoggerFormatting();
-		openLogFile(logPath);
+		openLogFile(computeLogPath(null));
 	}
 
 	// Called on the client thread. Snapshots the offer into plain data before handing
@@ -169,21 +169,37 @@ public class ImprovedExchangeLoggerWriter
 	}
 
 	// The shared log, unless splitting by account is on and we know the account - then each
-	// account gets its own file in the same directory.
+	// account gets its own file in the same directory. The extension always matches the
+	// currently selected format, so a format change mid-session is picked up the same way
+	// an account switch is - processEvent() just sees the target path changed.
 	private String computeLogPath(String accountName)
 	{
-		if (!splitByAccount || accountName == null || accountName.isEmpty())
+		String base = logPath;
+
+		if (splitByAccount && accountName != null && !accountName.isEmpty())
 		{
-			return logPath;
+			String sanitized = accountName.trim().replaceAll("[^a-zA-Z0-9]+", "_");
+			if (!sanitized.isEmpty())
+			{
+				base = logDir + File.separator + "exchange_" + sanitized;
+			}
 		}
 
-		String sanitized = accountName.trim().replaceAll("[^a-zA-Z0-9]+", "_");
-		if (sanitized.isEmpty())
-		{
-			return logPath;
-		}
+		return base + extensionFor(format);
+	}
 
-		return logDir + File.separator + "exchange_" + sanitized + ".log";
+	private static String extensionFor(ImprovedExchangeLoggerFormat format)
+	{
+		switch (format)
+		{
+			case TABULAR:
+				return ".csv";
+			case JSON:
+				return ".json";
+			case TEXT:
+			default:
+				return ".log";
+		}
 	}
 
 	// Opens (or creates) the log file at path, applying the same rewrite/date-rollover
@@ -275,9 +291,10 @@ public class ImprovedExchangeLoggerWriter
 	//Adding _[fileDate] at the end of the current file name and creates a new log
 	private void preserveCurrentFile(String fileDate)
 	{
-		String fileType = ".log";
-		String rename = activePath.substring(0, activePath.length() - fileType.length());
-		rename = rename + "_" + fileDate + fileType;
+		int extIndex = activePath.lastIndexOf('.');
+		String base = activePath.substring(0, extIndex);
+		String fileType = activePath.substring(extIndex);
+		String rename = base + "_" + fileDate + fileType;
 
 		if (!logFile.renameTo(new File(rename)))
 		{
