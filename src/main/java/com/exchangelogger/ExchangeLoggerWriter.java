@@ -35,6 +35,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Scanner;
+import java.util.concurrent.ScheduledExecutorService;
 import static net.runelite.api.GrandExchangeOfferState.BUYING;
 import static net.runelite.api.GrandExchangeOfferState.CANCELLED_BUY;
 import static net.runelite.api.GrandExchangeOfferState.CANCELLED_SELL;
@@ -45,18 +46,20 @@ import static net.runelite.api.GrandExchangeOfferState.SELLING;
 public class ExchangeLoggerWriter
 {
 	private File logFile;
-	private boolean fileExist;
+	private volatile boolean fileExist;
 
 	private final int[] prevQuantity;
+	private final int[] prevItemId;
 	private final GrandExchangeOfferState[] prevState;
 
 	private final ExchangeLoggerFormatting formatting;
-	private ExchangeLoggerFormat format;
-	private boolean rewrite;
+	private final ScheduledExecutorService executor;
+	private volatile ExchangeLoggerFormat format;
+	private volatile boolean rewrite;
 	private final String logPath;
 	private String logDate;
 
-	ExchangeLoggerWriter(String path, ExchangeLoggerFormat form, boolean re)
+	ExchangeLoggerWriter(String path, ExchangeLoggerFormat form, boolean re, ScheduledExecutorService executor)
 	{
 		fileExist = true;
 		logDate = currentDateTime("yyyy-MM-dd");
@@ -64,10 +67,13 @@ public class ExchangeLoggerWriter
 		logPath = path;
 		format = form;
 		rewrite = re;
+		this.executor = executor;
 
 		prevQuantity = new int[8];
+		prevItemId = new int[8];
 		prevState = new GrandExchangeOfferState[8];
 		Arrays.fill(prevQuantity, -1);          //Default to -1, because 0 is a valid state
+		Arrays.fill(prevItemId, -1);
 
 		formatting = new ExchangeLoggerFormatting();
 		logFile = new File(logPath);
@@ -90,53 +96,71 @@ public class ExchangeLoggerWriter
 		}
 	}
 
+	// Called on the client thread. Snapshots the offer into plain data before handing
+	// off to a background thread - GrandExchangeOffer must not be touched off-thread.
 	public void grandExchangeEvent(GrandExchangeOfferChanged event)
 	{
-		String time = currentDateTime("yyyy-MM-dd HH:mm:ss");
-
 		if (!fileExist)
 		{
 			return;
 		}
-		else if (!rewrite && !logDate.equals(time.substring(0, logDate.length())))  //New log if date changed during run-time
+
+		GrandExchangeOffer offer = event.getOffer();
+		String[] split = currentDateTime("yyyy-MM-dd HH:mm:ss").split(" ", 2);
+
+		ExchangeLoggerSlotStatus status = new ExchangeLoggerSlotStatus();
+		status.date = split[0];
+		status.time = split[1];
+		status.state = offer.getState();
+		status.slot = event.getSlot();
+		status.item = offer.getItemId();
+		status.qty = offer.getQuantitySold();
+		status.worth = offer.getSpent();
+		status.max = offer.getTotalQuantity();
+		status.offer = offer.getPrice();
+
+		executor.execute(() -> processEvent(status));
+	}
+
+	// Runs on a background thread. All disk I/O and mutable writer state lives here.
+	private synchronized void processEvent(ExchangeLoggerSlotStatus status)
+	{
+		if (!fileExist)
+		{
+			return;
+		}
+		else if (!rewrite && !logDate.equals(status.date))  //New log if date changed during run-time
 		{
 			preserveCurrentFile(logDate);
 		}
 
-		GrandExchangeOffer offer = event.getOffer();
-		int slot = event.getSlot();
-
-		if (duplicateHandler(offer, slot))         //Filter out duplicated events
+		if (duplicateHandler(status))         //Filter out duplicated events
 		{
 			return;
 		}
-		writeFile(offer, slot, time);
+		writeFile(status);
 	}
 
-	private void writeFile(GrandExchangeOffer offer, int slot, String time)
+	private void writeFile(ExchangeLoggerSlotStatus status)
 	{
-		String writeLine = "";
-		try
+		String writeLine;
+		switch (format)
 		{
-			FileWriter writer = new FileWriter(logFile, true);
+			case TABULAR:
+				writeLine = formatting.tabular(status);
+				break;
+			case JSON:
+				writeLine = formatting.json(status);
+				break;
+			case TEXT:
+			default:
+				writeLine = formatting.plainText(status);
+				break;
+		}
 
-			switch (format)
-			{
-				case TEXT:
-					writeLine = formatting.plainText(offer, slot, time);
-					break;
-				case TABULAR:
-					writeLine = formatting.tabular(offer, slot, time);
-					break;
-				case JSON:
-					writeLine = formatting.json(offer, slot, time);
-					break;
-			}
-
+		try (FileWriter writer = new FileWriter(logFile, true))
+		{
 			writer.write(writeLine + "\n");
-			writer.flush();
-			writer.close();
-
 		}
 		catch (IOException e)
 		{
@@ -148,19 +172,25 @@ public class ExchangeLoggerWriter
 	//This method will compare current event with the previous.
 	// 2 buying/selling events in sequence in the same slot can't have the same QuantitySold
 	// 2 cancelled_buy/sell events in sequence in the same slot shouldn't be possible
-	private boolean duplicateHandler(GrandExchangeOffer offer, int slot)
+	// Also requires the item id to match - otherwise a desync (e.g. a new offer placed with a
+	// coincidentally equal quantity/state) would be wrongly swallowed as a duplicate.
+	private boolean duplicateHandler(ExchangeLoggerSlotStatus status)
 	{
+		int slot = status.slot;
 		boolean duplicate = false;
+		boolean sameItem = prevItemId[slot] == status.item;
 
-		if ((prevQuantity[slot] == offer.getQuantitySold() && formatting.anyEqualState(offer.getState(), BUYING, SELLING))
-				|| (prevState[slot] == offer.getState() && formatting.anyEqualState(offer.getState(), CANCELLED_BUY, CANCELLED_SELL)))
+		if (sameItem
+				&& ((prevQuantity[slot] == status.qty && formatting.anyEqualState(status.state, BUYING, SELLING))
+					|| (prevState[slot] == status.state && formatting.anyEqualState(status.state, CANCELLED_BUY, CANCELLED_SELL))))
 		{
 			duplicate = true;
 		}
 		else    //EMPTY is always qty = 0, which makes next buy/sell assume it's a duplicate. Set it to -1
 		{
-			prevQuantity[slot] = ((offer.getState() == EMPTY) ? -1 : offer.getQuantitySold());
-			prevState[slot] = offer.getState();
+			prevQuantity[slot] = ((status.state == EMPTY) ? -1 : status.qty);
+			prevItemId[slot] = ((status.state == EMPTY) ? -1 : status.item);
+			prevState[slot] = status.state;
 		}
 		return duplicate;
 	}
