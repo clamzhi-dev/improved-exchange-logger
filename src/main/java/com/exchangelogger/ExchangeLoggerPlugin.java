@@ -36,11 +36,13 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import java.io.File;
+import java.util.concurrent.ScheduledExecutorService;
 
 @Slf4j
 @PluginDescriptor(
 	name = "Exchange Logger",
-	description = "Stores all GE transactions in log file(s)"
+	description = "Stores all GE transactions in log file(s)",
+	tags = {"grand exchange", "trade", "trading", "logger", "external"}
 )
 public class ExchangeLoggerPlugin extends Plugin
 {
@@ -49,6 +51,9 @@ public class ExchangeLoggerPlugin extends Plugin
 
 	@Inject
 	private ExchangeLoggerConfig config;
+
+	@Inject
+	private ScheduledExecutorService executor;
 
 	private final String dirName = File.separator + "exchange-logger";
 	private final String logName = File.separator + "exchange.log";
@@ -70,7 +75,7 @@ public class ExchangeLoggerPlugin extends Plugin
 		new File(dir).mkdirs();
 		logPath = dir + logName;
 
-		writer = new ExchangeLoggerWriter(logPath, format, rewrite);
+		writer = new ExchangeLoggerWriter(logPath, format, rewrite, executor);
 	}
 
 	@Override
