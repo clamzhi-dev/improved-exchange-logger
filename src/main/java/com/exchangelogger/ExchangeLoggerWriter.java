@@ -24,6 +24,7 @@
  */
 package com.exchangelogger;
 
+import com.google.gson.JsonSyntaxException;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
@@ -41,10 +42,18 @@ import static net.runelite.api.GrandExchangeOfferState.CANCELLED_BUY;
 import static net.runelite.api.GrandExchangeOfferState.CANCELLED_SELL;
 import static net.runelite.api.GrandExchangeOfferState.EMPTY;
 import static net.runelite.api.GrandExchangeOfferState.SELLING;
+import static net.runelite.api.GrandExchangeOfferState.SOLD;
 
 @Slf4j
 public class ExchangeLoggerWriter
 {
+	// GE sale tax: 2% of the per-item price, rounded down, waived under 50gp/item,
+	// capped at 5,000,000gp per item. offer.getSpent() reports the gross pre-tax
+	// total on sells, not what the seller actually receives, so this is applied
+	// after the fact using the average per-unit price (worth / qty).
+	private static final int GE_TAX_MIN_PRICE = 50;
+	private static final int GE_TAX_CAP_PER_ITEM = 5_000_000;
+
 	private File logFile;
 	private volatile boolean fileExist;
 
@@ -81,12 +90,12 @@ public class ExchangeLoggerWriter
 		Arrays.fill(prevItemId, -1);
 
 		formatting = new ExchangeLoggerFormatting();
-		openLogFile(logPath);
+		openLogFile(computeLogPath(null));
 	}
 
 	// Called on the client thread. Snapshots the offer into plain data before handing
 	// off to a background thread - GrandExchangeOffer must not be touched off-thread.
-	public void grandExchangeEvent(GrandExchangeOfferChanged event, String accountName)
+	public void grandExchangeEvent(GrandExchangeOfferChanged event, String accountName, String itemName)
 	{
 		if (!fileExist)
 		{
@@ -102,12 +111,41 @@ public class ExchangeLoggerWriter
 		status.state = offer.getState();
 		status.slot = event.getSlot();
 		status.item = offer.getItemId();
+		status.itemName = itemName;
 		status.qty = offer.getQuantitySold();
 		status.worth = offer.getSpent();
 		status.max = offer.getTotalQuantity();
 		status.offer = offer.getPrice();
 
+		if (formatting.anyEqualState(status.state, SELLING, SOLD, CANCELLED_SELL))
+		{
+			applySellTax(status);
+		}
+
 		executor.execute(() -> processEvent(status, accountName));
+	}
+
+	// Mutates worth (down to the net amount actually received) and sets tax (the amount
+	// withheld) - tax stays 0 for buys and for sales under the 50gp/item exemption.
+	// Math is done in long to avoid overflowing int on the unitPrice*2 step for
+	// extremely high-value items; the final tax can never exceed worth (an int), so
+	// the cast back to int at the end is always safe.
+	private static void applySellTax(ExchangeLoggerSlotStatus status)
+	{
+		if (status.qty <= 0)
+		{
+			return;
+		}
+
+		long unitPrice = status.worth / status.qty;
+		if (unitPrice < GE_TAX_MIN_PRICE)
+		{
+			return;
+		}
+
+		long unitTax = Math.min((unitPrice * 2) / 100, GE_TAX_CAP_PER_ITEM);
+		status.tax = (int) (unitTax * status.qty);
+		status.worth -= status.tax;
 	}
 
 	// Runs on a background thread. All disk I/O and mutable writer state lives here.
@@ -136,21 +174,37 @@ public class ExchangeLoggerWriter
 	}
 
 	// The shared log, unless splitting by account is on and we know the account - then each
-	// account gets its own file in the same directory.
+	// account gets its own file in the same directory. The extension always matches the
+	// currently selected format, so a format change mid-session is picked up the same way
+	// an account switch is - processEvent() just sees the target path changed.
 	private String computeLogPath(String accountName)
 	{
-		if (!splitByAccount || accountName == null || accountName.isEmpty())
+		String base = logPath;
+
+		if (splitByAccount && accountName != null && !accountName.isEmpty())
 		{
-			return logPath;
+			String sanitized = accountName.trim().replaceAll("[^a-zA-Z0-9]+", "_");
+			if (!sanitized.isEmpty())
+			{
+				base = logDir + File.separator + "exchange_" + sanitized;
+			}
 		}
 
-		String sanitized = accountName.trim().replaceAll("[^a-zA-Z0-9]+", "_");
-		if (sanitized.isEmpty())
-		{
-			return logPath;
-		}
+		return base + extensionFor(format);
+	}
 
-		return logDir + File.separator + "exchange_" + sanitized + ".log";
+	private static String extensionFor(ExchangeLoggerFormat format)
+	{
+		switch (format)
+		{
+			case TABULAR:
+				return ".csv";
+			case JSON:
+				return ".json";
+			case TEXT:
+			default:
+				return ".log";
+		}
 	}
 
 	// Opens (or creates) the log file at path, applying the same rewrite/date-rollover
@@ -242,9 +296,10 @@ public class ExchangeLoggerWriter
 	//Adding _[fileDate] at the end of the current file name and creates a new log
 	private void preserveCurrentFile(String fileDate)
 	{
-		String fileType = ".log";
-		String rename = activePath.substring(0, activePath.length() - fileType.length());
-		rename = rename + "_" + fileDate + fileType;
+		int extIndex = activePath.lastIndexOf('.');
+		String base = extIndex >= 0 ? activePath.substring(0, extIndex) : activePath;
+		String fileType = extIndex >= 0 ? activePath.substring(extIndex) : "";
+		String rename = base + "_" + fileDate + fileType;
 
 		if (!logFile.renameTo(new File(rename)))
 		{
@@ -258,24 +313,12 @@ public class ExchangeLoggerWriter
 	{
 		String fileDate = "";
 
-		try
+		try (Scanner reader = new Scanner(logFile))	//Read current log´s date
 		{
-			Scanner reader = new Scanner(logFile);	//Read current log´s date
 			if (reader.hasNextLine())
 			{
-				fileDate = reader.nextLine();
-
-				if (fileDate.contains("{"))		//Json format
-				{
-					String remove = "{\"date\":\"";
-					fileDate = fileDate.substring(remove.length(), logDate.length() + remove.length());
-				}
-				else
-				{
-					fileDate = fileDate.substring(0, logDate.length());
-				}
+				fileDate = extractDate(reader.nextLine());
 			}
-			reader.close();
 		}
 		catch (IOException e)
 		{
@@ -286,6 +329,29 @@ public class ExchangeLoggerWriter
 		{
 			preserveCurrentFile(fileDate);
 		}
+	}
+
+	// TEXT and TABULAR both start each line with the date (yyyy-MM-dd). JSON needs
+	// actual parsing rather than assuming "date" is serialized as the first field -
+	// that was only ever true by accident of field declaration order, not guaranteed.
+	// activePath's extension always matches the currently active format (see
+	// computeLogPath), so this file was written under that same format.
+	private String extractDate(String firstLine)
+	{
+		if (format == ExchangeLoggerFormat.JSON)
+		{
+			try
+			{
+				ExchangeLoggerSlotStatus status = formatting.parseJson(firstLine);
+				return status != null && status.date != null ? status.date : "";
+			}
+			catch (JsonSyntaxException e)
+			{
+				return "";
+			}
+		}
+
+		return firstLine.length() >= logDate.length() ? firstLine.substring(0, logDate.length()) : "";
 	}
 
 	private File createLog(String path)
@@ -339,5 +405,12 @@ public class ExchangeLoggerWriter
 	public void setSplitByAccount(boolean split)
 	{
 		splitByAccount = split;
+	}
+
+	// Lets callers skip event-preparation work (e.g. resolving the item name) up front
+	// when nothing would be written anyway - e.g. the log file failed to create.
+	public boolean isActive()
+	{
+		return fileExist;
 	}
 }

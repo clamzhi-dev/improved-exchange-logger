@@ -33,6 +33,7 @@ import net.runelite.client.RuneLite;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import java.io.File;
@@ -55,8 +56,13 @@ public class ExchangeLoggerPlugin extends Plugin
 	@Inject
 	private ScheduledExecutorService executor;
 
+	@Inject
+	private ItemManager itemManager;
+
 	private final String dirName = File.separator + "exchange-logger";
-	private final String logName = File.separator + "exchange.log";
+	// No extension here - ExchangeLoggerWriter appends one matching the
+	// selected log format (.log/.csv/.json).
+	private final String logName = File.separator + "exchange";
 
 	public static final String CONFIG_GROUP = "exchangelogger";
 	private ExchangeLoggerFormat format;
@@ -111,11 +117,15 @@ public class ExchangeLoggerPlugin extends Plugin
 	public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerEvent)
 	{
 		// Trades are cleared by the client during LOGIN_SCREEN/HOPPING/LOGGING_IN, ignore those
-		if (client.getGameState() == GameState.LOGGED_IN)
+		if (client.getGameState() == GameState.LOGGED_IN && writer.isActive())
 		{
 			Player localPlayer = client.getLocalPlayer();
 			String accountName = localPlayer != null ? localPlayer.getName() : null;
-			writer.grandExchangeEvent(offerEvent, accountName);
+
+			int itemId = offerEvent.getOffer().getItemId();
+			String itemName = itemId > 0 ? itemManager.getItemComposition(itemId).getName() : "";
+
+			writer.grandExchangeEvent(offerEvent, accountName, itemName);
 		}
 	}
 

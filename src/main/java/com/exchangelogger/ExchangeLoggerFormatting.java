@@ -46,12 +46,13 @@ public class ExchangeLoggerFormatting
 			String firstState = ((status.state == BUYING) ? "BUY" : "SELL");
 
 			line = (time + " state: " + firstState + " slot: " + status.slot + " item: " + status.item
-					+ " max: " + status.max + " offer: " + status.offer);
+					+ " (" + status.itemName + ")" + " max: " + status.max + " offer: " + status.offer);
 		}
 		else if (anyEqualState(status.state, CANCELLED_BUY, CANCELLED_SELL))
 		{
 			line = (time + " state: " + status.state + " slot: " + status.slot + " item: " + status.item
-					+ " qty: " + status.qty + " worth: " + status.worth + " max: " + status.max);
+					+ " (" + status.itemName + ")" + " qty: " + status.qty + " worth: " + status.worth
+					+ " tax: " + status.tax + " max: " + status.max);
 		}
 		else if (status.state == EMPTY)
 		{
@@ -60,7 +61,8 @@ public class ExchangeLoggerFormatting
 		else
 		{
 			line = (time + " state: " + status.state + " slot: " + status.slot + " item: " + status.item
-					+ " qty: " + status.qty + " worth: " + status.worth);
+					+ " (" + status.itemName + ")" + " qty: " + status.qty + " worth: " + status.worth
+					+ " tax: " + status.tax);
 		}
 		return line;
 	}
@@ -68,13 +70,26 @@ public class ExchangeLoggerFormatting
 	public String tabular(ExchangeLoggerSlotStatus status)
 	{
 		return (status.date + "," + status.time + "," + status.state
-				+ "," + status.slot + "," + status.item + "," + status.qty
-				+ "," + status.worth + "," + status.max + "," + status.offer);
+				+ "," + status.slot + "," + status.item + "," + csvField(status.itemName) + "," + status.qty
+				+ "," + status.worth + "," + status.max + "," + status.offer + "," + status.tax);
+	}
+
+	// Item names are the only free-text field in tabular output, so they're the only
+	// thing that needs CSV quoting/escaping (OSRS item names don't use commas, but a
+	// stray quote or a future name that does shouldn't be able to break the format).
+	private static String csvField(String value)
+	{
+		return "\"" + (value == null ? "" : value.replace("\"", "\"\"")) + "\"";
 	}
 
 	public String json(ExchangeLoggerSlotStatus status)
 	{
 		return GSON.toJson(status);
+	}
+
+	public ExchangeLoggerSlotStatus parseJson(String line)
+	{
+		return GSON.fromJson(line, ExchangeLoggerSlotStatus.class);
 	}
 
 	public boolean anyEqualState(GrandExchangeOfferState expected, GrandExchangeOfferState ...array)
