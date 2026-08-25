@@ -37,4 +37,6 @@ public class ExchangeLoggerSlotStatus
 	int worth;
 	int max;
 	int offer;
+	String itemName;
+	int tax;
 }

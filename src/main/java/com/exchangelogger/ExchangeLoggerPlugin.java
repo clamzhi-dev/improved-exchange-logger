@@ -33,14 +33,17 @@ import net.runelite.client.RuneLite;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import java.io.File;
+import java.util.concurrent.ScheduledExecutorService;
 
 @Slf4j
 @PluginDescriptor(
 	name = "Exchange Logger",
-	description = "Stores all GE transactions in log file(s)"
+	description = "Stores all GE transactions in log file(s)",
+	tags = {"grand exchange", "trade", "trading", "logger", "external"}
 )
 public class ExchangeLoggerPlugin extends Plugin
 {
@@ -50,8 +53,16 @@ public class ExchangeLoggerPlugin extends Plugin
 	@Inject
 	private ExchangeLoggerConfig config;
 
+	@Inject
+	private ScheduledExecutorService executor;
+
+	@Inject
+	private ItemManager itemManager;
+
 	private final String dirName = File.separator + "exchange-logger";
-	private final String logName = File.separator + "exchange.log";
+	// No extension here - ExchangeLoggerWriter appends one matching the
+	// selected log format (.log/.csv/.json).
+	private final String logName = File.separator + "exchange";
 
 	public static final String CONFIG_GROUP = "exchangelogger";
 	private ExchangeLoggerFormat format;
@@ -70,7 +81,7 @@ public class ExchangeLoggerPlugin extends Plugin
 		new File(dir).mkdirs();
 		logPath = dir + logName;
 
-		writer = new ExchangeLoggerWriter(logPath, format, rewrite);
+		writer = new ExchangeLoggerWriter(logPath, format, rewrite, config.splitByAccount(), executor);
 	}
 
 	@Override
@@ -95,6 +106,10 @@ public class ExchangeLoggerPlugin extends Plugin
 				writer.setRewrite(rewrite);
 
 			}
+			else if (event.getKey().equals("splitByAccount"))	//Log each account to its own file
+			{
+				writer.setSplitByAccount(config.splitByAccount());
+			}
 		}
 	}
 
@@ -102,9 +117,15 @@ public class ExchangeLoggerPlugin extends Plugin
 	public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerEvent)
 	{
 		// Trades are cleared by the client during LOGIN_SCREEN/HOPPING/LOGGING_IN, ignore those
-		if (client.getGameState() == GameState.LOGGED_IN)
+		if (client.getGameState() == GameState.LOGGED_IN && writer.isActive())
 		{
-			writer.grandExchangeEvent(offerEvent);
+			Player localPlayer = client.getLocalPlayer();
+			String accountName = localPlayer != null ? localPlayer.getName() : null;
+
+			int itemId = offerEvent.getOffer().getItemId();
+			String itemName = itemId > 0 ? itemManager.getItemComposition(itemId).getName() : "";
+
+			writer.grandExchangeEvent(offerEvent, accountName, itemName);
 		}
 	}
 

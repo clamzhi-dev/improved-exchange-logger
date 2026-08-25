@@ -26,72 +26,74 @@ package com.exchangelogger;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import static net.runelite.api.GrandExchangeOfferState.*;
 
 public class ExchangeLoggerFormatting
 {
-	String line;
+	// Stateless; reused across the JSON formatter to avoid rebuilding it per call.
+	private static final Gson GSON = new GsonBuilder().create();
 
-	public String plainText(GrandExchangeOffer offer, int slot, String time)
+	public String plainText(ExchangeLoggerSlotStatus status)
 	{
+		String time = status.date + " " + status.time;
+		String line;
+
 		//First offer for item
-		if (offer.getQuantitySold() == 0 && anyEqualState(offer.getState(), BUYING, SELLING))
+		if (status.qty == 0 && anyEqualState(status.state, BUYING, SELLING))
 		{
 			//Differentiate the first offer state from subsequent ones
-			String firstState = ((offer.getState() == BUYING) ? "BUY" : "SELL");
+			String firstState = ((status.state == BUYING) ? "BUY" : "SELL");
 
-			line = (time + " state: " + firstState + " slot: " + slot + " item: " + offer.getItemId()
-					+ " max: " + offer.getTotalQuantity() + " offer: " + offer.getPrice());
+			line = (time + " state: " + firstState + " slot: " + status.slot + " item: " + status.item
+					+ " (" + status.itemName + ")" + " max: " + status.max + " offer: " + status.offer);
 		}
-		else if (anyEqualState(offer.getState(), CANCELLED_BUY, CANCELLED_SELL))
+		else if (anyEqualState(status.state, CANCELLED_BUY, CANCELLED_SELL))
 		{
-			line = (time + " state: " + offer.getState() + " slot: " + slot + " item: " + offer.getItemId()
-					+ " qty: " + offer.getQuantitySold() + " worth: " + offer.getSpent() + " max: " + offer.getTotalQuantity());
+			line = (time + " state: " + status.state + " slot: " + status.slot + " item: " + status.item
+					+ " (" + status.itemName + ")" + " qty: " + status.qty + " worth: " + status.worth
+					+ " tax: " + status.tax + " max: " + status.max);
 		}
-		else if (offer.getState() == EMPTY)
+		else if (status.state == EMPTY)
 		{
-			line = (time + " state: " + offer.getState() + " slot: " + slot);
+			line = (time + " state: " + status.state + " slot: " + status.slot);
 		}
 		else
 		{
-			line = (time + " state: " + offer.getState() + " slot: " + slot + " item: " + offer.getItemId()
-					+ " qty: " + offer.getQuantitySold() + " worth: " + offer.getSpent());
+			line = (time + " state: " + status.state + " slot: " + status.slot + " item: " + status.item
+					+ " (" + status.itemName + ")" + " qty: " + status.qty + " worth: " + status.worth
+					+ " tax: " + status.tax);
 		}
 		return line;
 	}
 
-	public String tabular(GrandExchangeOffer offer, int slot, String time)
+	// itemName and tax are appended at the end, after the original 9 columns, rather
+	// than interleaved - existing users' spreadsheets/scripts reading by column
+	// position keep working unchanged; only new trailing columns show up.
+	public String tabular(ExchangeLoggerSlotStatus status)
 	{
-		String[] split = time.split(" ", 2);
-		line = (split[0] + "," + split[1] + "," + offer.getState()
-				+ "," + slot + "," + offer.getItemId() + "," + offer.getQuantitySold()
-				+ "," + offer.getSpent() + "," + offer.getTotalQuantity() + "," + offer.getPrice());
-
-		return line;
+		return (status.date + "," + status.time + "," + status.state
+				+ "," + status.slot + "," + status.item + "," + status.qty
+				+ "," + status.worth + "," + status.max + "," + status.offer
+				+ "," + csvField(status.itemName) + "," + status.tax);
 	}
 
-	public String json(GrandExchangeOffer offer, int slot, String time)
+	// Item names are the only free-text field in tabular output, so they're the only
+	// thing that needs CSV quoting/escaping (OSRS item names don't use commas, but a
+	// stray quote or a future name that does shouldn't be able to break the format).
+	private static String csvField(String value)
 	{
-		ExchangeLoggerSlotStatus status = new ExchangeLoggerSlotStatus();
-		String[] split = time.split(" ", 2);
+		return "\"" + (value == null ? "" : value.replace("\"", "\"\"")) + "\"";
+	}
 
-		status.date = split[0];
-		status.time = split[1];
-		status.state = offer.getState();
-		status.slot = slot;
-		status.item = offer.getItemId();
-		status.qty = offer.getQuantitySold();
-		status.worth = offer.getSpent();
-		status.max = offer.getTotalQuantity();
-		status.offer = offer.getPrice();
+	public String json(ExchangeLoggerSlotStatus status)
+	{
+		return GSON.toJson(status);
+	}
 
-		GsonBuilder builder = new GsonBuilder();
-		Gson gson = builder.create();
-		String jsonString = gson.toJson(status);
-
-		return jsonString;
+	public ExchangeLoggerSlotStatus parseJson(String line)
+	{
+		return GSON.fromJson(line, ExchangeLoggerSlotStatus.class);
 	}
 
 	public boolean anyEqualState(GrandExchangeOfferState expected, GrandExchangeOfferState ...array)
