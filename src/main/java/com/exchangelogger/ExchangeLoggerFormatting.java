@@ -67,11 +67,15 @@ public class ExchangeLoggerFormatting
 		return line;
 	}
 
+	// itemName and tax are appended at the end, after the original 9 columns, rather
+	// than interleaved - existing users' spreadsheets/scripts reading by column
+	// position keep working unchanged; only new trailing columns show up.
 	public String tabular(ExchangeLoggerSlotStatus status)
 	{
 		return (status.date + "," + status.time + "," + status.state
-				+ "," + status.slot + "," + status.item + "," + csvField(status.itemName) + "," + status.qty
-				+ "," + status.worth + "," + status.max + "," + status.offer + "," + status.tax);
+				+ "," + status.slot + "," + status.item + "," + status.qty
+				+ "," + status.worth + "," + status.max + "," + status.offer
+				+ "," + csvField(status.itemName) + "," + status.tax);
 	}
 
 	// Item names are the only free-text field in tabular output, so they're the only

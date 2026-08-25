@@ -33,10 +33,10 @@ public class ExchangeLoggerSlotStatus
 	GrandExchangeOfferState state;
 	int slot;
 	int item;
-	String itemName;
 	int qty;
 	int worth;
 	int max;
 	int offer;
+	String itemName;
 	int tax;
 }

@@ -59,14 +59,16 @@ listed to sell at 143gp but matched at 152gp, taxed 3gp, netting 149gp):
 2026-08-24 23:44:35 state: SOLD slot: 0 item: 2351 (Iron bar) qty: 1 worth: 149 tax: 3
 ```
 
-**Tabular** (CSV: `date,time,state,slot,item,itemName,qty,worth,max,offer,tax`
-- `itemName` is quoted since it's the only free-text field):
+**Tabular** (CSV: `date,time,state,slot,item,qty,worth,max,offer,itemName,tax` -
+`itemName` and `tax` are appended after the original columns rather than
+interleaved, so existing column-position parsing keeps working; `itemName`
+is quoted since it's the only free-text field):
 ```
-2026-08-24,23:44:11,BOUGHT,0,2351,"Iron bar",1,153,1,164,0
-2026-08-24,23:44:35,SOLD,0,2351,"Iron bar",1,149,1,143,3
+2026-08-24,23:44:11,BOUGHT,0,2351,1,153,1,164,"Iron bar",0
+2026-08-24,23:44:35,SOLD,0,2351,1,149,1,143,"Iron bar",3
 ```
 
 **JSON** (one object per line):
 ```json
-{"date":"2026-08-24","time":"23:44:35","state":"SOLD","slot":0,"item":2351,"itemName":"Iron bar","qty":1,"worth":149,"max":1,"offer":143,"tax":3}
+{"date":"2026-08-24","time":"23:44:35","state":"SOLD","slot":0,"item":2351,"qty":1,"worth":149,"max":1,"offer":143,"itemName":"Iron bar","tax":3}
 ```
