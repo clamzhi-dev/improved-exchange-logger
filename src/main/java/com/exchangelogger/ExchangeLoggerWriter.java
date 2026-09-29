@@ -138,9 +138,6 @@ public class ExchangeLoggerWriter
 
 	// Mutates worth (down to the net amount actually received) and sets tax (the amount
 	// withheld) - tax stays 0 for buys and for sales under the 50gp/item exemption.
-	// Math is done in long to avoid overflowing int on the unitPrice*2 step for
-	// extremely high-value items; the final tax can never exceed worth (an int), so
-	// the cast back to int at the end is always safe.
 	private static void applySellTax(ExchangeLoggerSlotStatus status)
 	{
 		if (status.qty <= 0)
@@ -155,7 +152,7 @@ public class ExchangeLoggerWriter
 		}
 
 		long unitTax = Math.min((unitPrice * 2) / 100, GE_TAX_CAP_PER_ITEM);
-		status.tax = (int) (unitTax * status.qty);
+		status.tax = unitTax * status.qty;
 		status.worth -= status.tax;
 	}
 
