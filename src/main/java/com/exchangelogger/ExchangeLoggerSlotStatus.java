@@ -34,9 +34,11 @@ public class ExchangeLoggerSlotStatus
 	int slot;
 	int item;
 	int qty;
-	int worth;
+	// gp amounts are long: the GE now allows offers whose total value exceeds
+	// Integer.MAX_VALUE, and GrandExchangeOffer.getPrice()/getSpent() return long.
+	long worth;
 	int max;
-	int offer;
+	long offer;
 	String itemName;
-	int tax;
+	long tax;
 }
